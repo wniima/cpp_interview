@@ -18,7 +18,7 @@
 
 数据和代码捆绑在一起，避免外界干扰和不确定性访问。
 
-封装，也就是**把客观事物封装成抽象的类**，并且类可以把自己的数据和方法只让可信的类或者对象操作，对不可信的进行信息隐藏，例如：将公共的数据或方法使用public修饰，而不希望被访问的数据或方法采用private修饰。
+封装，也就是**把客观事物的属性和行为抽象成类**，并且类可以把自己的数据和方法只让可信的类或者对象操作，对不可信的进行信息隐藏，例如：将公共的数据或方法使用public修饰，而不希望被访问的数据或方法采用private修饰。
 
 ## 1.3 多态
 
@@ -48,13 +48,15 @@
 - 指针 upcast 向上转型
 - 调用的是虚函数
 
+简单点来说就是通过父类的指针或引用来访问子类的虚函数。
+
 # 2 虚函数
 
 ## 2.1 构造函数或析构函数中是否可以调用虚函数？
 
 可以。不过调用会屏蔽多态机制，最终会把基类中的该虚函数作为普通函数调用，而不会调用派生类中的被重写的函数。
 
-这是因为在创建子类对象的时候，会先调用父类的构造函数，而此时虚函数表以及子类对象还没有被初始化，如果此时发生发生多态行为，有可能会调用未被初始化的内存，C++标准规范中规定了在这种情况下，即在构造子类时调用父类的构造函数，而父类的构造函数中又调用了虚成员函数，这个虚成员函数即使被子类重写，也不允许发生多态的行为。所以使用的是静态绑定，调用了父类的函数。
+这是因为在创建子类对象的时候，会先调用父类的构造函数，而此时虚函数表以及**子类对象还没有被初始化**，如果此时发生发生多态行为，**有可能会调用未被初始化的内存**，C++标准规范中规定了在这种情况下，即在构造子类时调用父类的构造函数，而父类的构造函数中又调用了虚成员函数，这个虚成员函数即使被子类重写，也不允许发生多态的行为。所以使用的是静态绑定，调用了父类的函数。
 
 ```c++
 #include <iostream>
@@ -210,7 +212,7 @@ std::shared_ptr<C> pb(ptr);
 
 weak_ptr 是一种**不控制对象生命周期**的智能指针，它指向一个 shared_ptr 管理的对象，但是不影响shared_ptr的引用计数。
 
-weak_ptr 设计的目的是用于解决shared_ptr相互引用时产生死锁问题。如果有两个shared_ptr相互引用，那么这两个shared_ptr指针的引用计数永远不会下降为0，资源永远不会释放。weak_ptr是对对象的一种**弱引用**，它不会增加对象的use_count，weak_ptr和shared_ptr可以相互转化，shared_ptr可以直接赋值给weak_ptr，weak_ptr也可以通过调用lock函数来获得shared_ptr。
+weak_ptr 设计的目的是用于解决shared_ptr**相互引用时产生死锁**问题。如果有两个shared_ptr相互引用，那么这两个shared_ptr指针的引用计数永远不会下降为0，资源永远不会释放。weak_ptr是对对象的一种**弱引用**，它不会增加对象的use_count，weak_ptr和shared_ptr可以相互转化，shared_ptr可以直接赋值给weak_ptr，weak_ptr也可以通过调用lock函数来获得shared_ptr。
 
 ```c++
 #include <iostream>
@@ -462,7 +464,7 @@ int* p = &n;
 
 ## 6.1 浅拷贝
 
-浅拷贝是指源对象与拷贝对象共用一份实体，仅仅是引用的变量不同（名称不同）。对其中任何一个对象的改动都会影响另外一个对象。 **不需要开辟新的空间。**
+浅拷贝是**指源对象与拷贝对象共用一份实体**，仅仅是引用的变量不同（名称不同）。对其中任何一个对象的改动都会影响另外一个对象。 **不需要开辟新的空间。**
 
 ```c++
 class String
@@ -679,7 +681,7 @@ int main() {
 
 ## 7.4 [完美转发](https://zhuanlan.zhihu.com/p/161039484)
 
-std::forward被称为**完美转发**，它的作用是保持原来的值属性不变。通俗的讲就是，如果原来的值是左值，经std::forward处理后该值还是左值；如果原来的值是右值，经std::forward处理后它还是右值。
+std::forward被称为**完美转发**，它的作用是**保持原来的值属性不变**。通俗的讲就是，如果原来的值是左值，经std::forward处理后该值还是左值；如果原来的值是右值，经std::forward处理后它还是右值。
 
 ```c++
 #include <iostream>
@@ -796,6 +798,27 @@ const int* p = &a;
 *p = 2;					// 不可以
 p = &b;					// 可以
 ```
+
+### 8.3.1 const和constexpr的区别
+
+const保证了运行时不可以被修改，但是它修饰的内容任然可能是个动态变量；
+
+将变量声明为constexpr类型以便由编译器来验证变量的值是否是一个常量表达式。用constxepr声明的变量必须是一个**常量**，而且必须用**常量表达式进行初始化**。
+
+constexpr可以用于修饰函数，这个函数的返回值会尽可能在编译期间被计算出来当作一个常量，但是如果编译期间此函数不能被计算出来，那它就会当作一个普通函数被处理
+
+```c++
+constexpr int fun(int i) {
+    return i + 1;
+}
+int main() {
+    int i = 2;
+    fun(i);		// 普通函数
+    fun(2);		// 编译期间就会被计算出来
+}
+```
+
+
 
 ## 8.4 decltype
 
@@ -946,6 +969,14 @@ free(p_malloc);
 
 （3）malloc申请的位置在堆空间，而new分配的内存空间在自由存储区。
 
+## 8.10 enum
+
+将变量的值一一列出来,且变量的值只限于列举出来的值的范围内。
+
+enum class: 枚举类型限定的作用域，不同的枚举类不可以互相比较
+
+
+
 # 9 内存管理
 
 ## 9.1 内存布局
@@ -972,9 +1003,9 @@ free(p_malloc);
 
 ### 9.2.1 为什么要内存对齐
 
-（1）硬件平台限制，内存以字节为单位，不同硬件平台不一定支持任何内存地址的存取，一般可能以双字节、四字节等为单位存取内存，为了保证处理器能够正确存取数据，需要进行内存对齐。
+（1）硬件平台限制，内存以字节为单位，不一定所有硬件平台全都支持任何内存地址的存取，一般可能以双字节、四字节等为单位存取内存，为了**保证处理器能够正确存取数据**，需要进行内存对齐。
 
-（2）提高CPU内存访问速度，一般处理器的内存存取粒度都是N的整数倍，假如访问N大小的数据，没有进行内存对齐，有可能就需要两次访问才能读取出数据，而进行内存对齐可以一次性把数据全部读取出来，提高效率。
+（2）提高**CPU内存访问速度**，一般处理器的内存存取粒度都是N的整数倍，假如访问N大小的数据，没有进行内存对齐，有可能就需要两次访问才能读取出数据，而进行内存对齐可以一次性把数据全部读取出来，提高效率。
 
 ```c++
 static std::aligned_storage<sizeof(A), alignof(A)>::type data;
@@ -1020,9 +1051,186 @@ int main()
 
 # 10 多线程
 
+## 10.1 thread
+
+利用`std::thread `创建一个线程
+
+```c++
+#include <iostream>
+#include <thread>
+
+void print(int k) {
+    for (int i = 0; i < k; ++i) {
+        std::cout << i << std::endl;
+    }
+}
+
+int main() {
+    // 利用lambda表达式创建一个子线程
+    auto fun = [](int k){
+        for (int i = 0; i < k; ++i) {
+            std::cout << i << std::endl;
+        }
+    }
+    
+    // 子线程开始执行
+    std::thread thread(fun, 6);
+    
+    // join()的作用是阻塞主线程，z执行完，然后main继续往下走
+    // detach()的作用是使子线程脱离子线程
+    // joinable()判断子线程是否可以join或者detach
+    if (thread.joinable) {
+        thread.join(); 
+    }
+
+    std::cout << "main" << std::endl;
+    return 0;
+}
+
+/*
+    0
+    1
+    2
+    3
+    4
+    5
+    main
+*/
+```
+
+用类调用创建一个子线程：
+
+```C++
+class TA {
+public:
+    // 重载()，使得类对象变成可调用对象
+    void operator()() {
+        std::cout << "abcd" << std::endl;
+        for (int i = 0; i < 5; ++i) {
+            std::cout << i << " ";
+        }
+        std::cout << std::endl;
+    }
+};
+
+int main() {
+    TA ta;
+    // 开始运行子线程
+    std::thread thread(ta);
+    thread.join();
+    std::cout << "main over!" << std::endl;
+}
+
+/*
+    abcd
+    0 1 2 3 4
+    main over!
+*/
+```
+
+## 10.2 mutex
+
+[互斥量和lock_guard类](https://blog.csdn.net/qq_38231713/article/details/106091902)
+
+## 10.3 [unique_lock](https://blog.csdn.net/qq_38231713/article/details/106092134)
+
+`unique_lock`比`lock_guard`灵活，但是消耗的资源多。
+
+`unique_lock`的第二个参数：
+
+（1）std::adopt_lock：表示这个互斥量已经被锁住了，调用方不用再去上锁。使用的前提是已经先给互斥量上锁。
+
+（2）std::try_to_lock：尝试用mutex的lock()去上锁，如果没有上锁成功，并不会继续等（阻塞），而是可以去转而执行其它的事。使用的前提是自己不能先给互斥量上锁。 可以用owns_lock()来判断是否拿到了锁。
+
+（3）std::defer_lock：使用的前提是自己不能先lock，否则会异常。作用是初始化了一个没有加锁的mutex
+
+```c++
+std::mutex mut;
+std::unique_lock<std::mutex> ul(mut, std::defer_lock);
+ul.lock();				// 需要自己手动上锁，但是不用解锁
+```
+
+`unique_lock`成员函数：
+
+（1）lock()：上锁
+
+（2）unlock()：解锁
+
+（3）try_lock()：尝试上锁，类似于try_to_lock
+
+（4）release()：返回它所管理的**mutex对象指针**，并且释放所有权；就是说unique_lock不再控制mutex了。
+
+## 10.4 [call_once](https://blog.csdn.net/qq_38231713/article/details/106092538)
+
+保证在多线程的情况下，函数只会被调用一次。需要与`once_flag`结合使用，调用call_once()成功后，就会把`once_flag`设置为已调用的状态，后序就不会再执行了。
+
+例如单例对象在多线程初始化的时候是初始化一次。
+
+```c++
+#include <iostream>
+#include <mutex>
 
 
-# N STL
+std::once_flag flag;
+
+// 单例类，懒汉模式
+class Singleton {
+public:
+    // 将需要只执行一次的函数单独封装起来
+    static void createInstance(int val) {
+        if (ptr_instance_ == nullptr) {
+            // 如果没有创建实例对象，则创建一个新的对象
+            ptr_instance_ = new Singleton(val);
+            // 创建静态的清理对象
+            static GC gc;
+        }
+    }
+
+    static Singleton * getInstance(int val) {
+        // 只会执行一次
+        std::call_once(flag, createInstance, val);
+        return ptr_instance_;
+    }
+    
+    // 释放占用的空间
+    class GC {
+    public:
+        ~GC() {
+            if (ptr_instance_) {
+                delete ptr_instance_;
+                ptr_instance_ = nullptr;
+                std::cout << "delete" << std::endl;
+            }
+        }
+    };
+    
+    void func() {
+        std::cout << "val_ = " << val_ << std::endl;
+    }
+private:
+    // 私有化构造函数
+    Singleton(int val) : val_(val) {}
+    int val_;
+    static Singleton *ptr_instance_;
+};
+
+// 先初始化对象
+Singleton *Singleton::ptr_instance_ = nullptr;
+
+int main() {
+    Singleton *pa = Singleton::getInstance(5);
+    pa->func();
+    // 虽然能够创建第二个实例对象，但实际上并没有创建新的
+    Singleton *pb = Singleton::getInstance(6);
+    pb->func();
+
+    return 0;
+}
+```
+
+
+
+# 11 STL
 
 ## emplace和push
 
@@ -1053,3 +1261,72 @@ int main()
 （3）**开链（Separate chaining）**
 
 在每一个位置维护一个链表，遭遇到哈希碰撞问题时就把元素插入链表中。开链的方式会使得负载系数大于1。
+
+# 12 设计模式
+
+## 12.1 [单例模式](https://blog.csdn.net/qq_38231713/article/details/106092538)
+
+一个类只能实例化一个对象。
+
+（1）懒汉模式
+
+```c++
+#include <iostream>
+#include <mutex>
+
+std::mutex instance_mutex;
+
+// 单例类，懒汉模式
+class Singleton {
+public:
+    static Singleton * getInstance(int val) {
+        if (ptr_instance_ == nullptr) {
+            // 采用双重锁定（双重检查），保证在多线程中只在对象第一次实例化的时候才上锁
+            // 单独枷锁的话，意味着每次调用getInstance时就需要上锁解锁一次，效率不高
+            std::unique_lock<std::mutex> lock(instance_mutex);
+            if (ptr_instance_ == nullptr) {
+                // 如果没有创建实例对象，则创建一个新的对象
+                ptr_instance_ = new Singleton(val);
+                // 创建静态的清理对象
+                static GC gc;
+            }
+        }
+        return ptr_instance_;
+    }
+    
+    // 释放占用的空间
+    class GC {
+    public:
+        ~GC() {
+            if (ptr_instance_) {
+                delete ptr_instance_;
+                ptr_instance_ = nullptr;
+                std::cout << "delete" << std::endl;
+            }
+        }
+    };
+    
+    void func() {
+        std::cout << "val_ = " << val_ << std::endl;
+    }
+private:
+    // 私有化构造函数
+    Singleton(int val) : val_(val) {}
+    int val_;
+    static Singleton *ptr_instance_;
+};
+
+// 先初始化对象
+Singleton *Singleton::ptr_instance_ = nullptr;
+
+int main() {
+    Singleton *pa = Singleton::getInstance(5);
+    pa->func();
+    // 虽然能够创建第二个实例对象，但实际上并没有创建新的
+    Singleton *pb = Singleton::getInstance(6);
+    pb->func();
+
+    return 0;
+}
+```
+
