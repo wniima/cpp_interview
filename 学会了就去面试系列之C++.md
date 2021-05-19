@@ -1228,7 +1228,225 @@ int main() {
 }
 ```
 
+## 10.5 [condition_variable](https://blog.csdn.net/qq_38231713/article/details/106092714)
 
+线程中等待某个条件满足后才执行。
+
+（1）wait()：默认解锁互斥量，并在当前行阻塞，等待唤醒；
+
+（2）notify_one()：唤醒等待的线程
+
+（3）notify_all()：通知所有的等待线程
+
+```c++
+#include <condition_variable>
+#include <mutex>
+
+int mian() {
+    std::mutex mutex;
+    std::unique_lock<std::mutex> lockGuard(mutex);
+    std::condition_variable conditionVariable;
+    // wait()用来等待，如果lambda返回false，那么wait()会解锁互斥量，并堵塞，直到其它地方调用notify_one()为止
+    // 如果没有第二个参数，就直接堵塞 == 第二个参数返回false
+    conditionVariable.wait(lockGuard, []{
+        if (true) {
+            return true;
+        }
+        return false;
+    });
+    return 0;
+}
+```
+
+## 10. 6 [future](https://blog.csdn.net/qq_38231713/article/details/106092879)
+
+### 10.6.1 future、async
+
+`async`启动一个**异步任务**，返回一个`std::future`对象。
+
+所谓启动一个异步任务，就是自动创建一个线程并开始执行线程入口函数，并将结果保存下来，可以通过`std::future::get()`函数获得。`std::future::wait()`只是等待线程结果，但是并不会获得结果。
+
+如果既没有`get()`也没有`wait()`若子线程在主程序没有结束时没有执行完，那么主程序会在结束处堵塞，直到子线程执行完。
+
+`std::future`提供了一种异步访问操作结果的机制。
+
+std::async()的一些系统参数，放在第一个参数：
+
+（1）std::launch::deferred：表示线程入口函数调用被延迟到wait()或者get()调用时才执行，并且不会创建线程，入口函数是在主线程中执行的；如两个都没有调用，就不会执行入口函数。
+
+（2）std::launch::async：创建一个子线程，并且开始执行入口函数。是默认参数
+
+
+
+```c++
+#include <iostream>
+#include <future>
+#include <chrono>
+
+int func() {
+    std::cout << "thread start!" << " id: " << std::this_thread::get_id()  << std::endl;
+    std::cout << "......" << std::endl;
+    std::this_thread::sleep_for(std::chrono::seconds(5));
+    std::cout << "thread end!" << " id: " << std::this_thread::get_id()  << std::endl;
+    
+    return 5;
+}
+
+int main() {
+    std::cout << "main start! id: " << std::this_thread::get_id() << std::endl;
+    std::future<int> future = std::async(func);
+    // 调用get()函数后，程序会阻塞在这儿，直到线程结束得到结果
+    // get()函数只能调用一次，重复调用会报异常！
+    std::cout << future.get() << std::endl;
+
+    return 0;
+}
+/*
+    main start! id: 1
+    thread start! id: 2
+    ......
+    thread end! id: 2
+    5
+*/
+```
+
+### 10.6.2 packaged_task
+
+`std::packaged_task`是一个类模板，它的模板参数是各种可调用对象，通过它可以将对象包装起来，方便作为线程入口函数调用。
+
+而且它是可以直接调用的，但是就不会开启新线程，而是直接在主线程中执行函数。
+
+```c++
+#include <iostream>
+#include <future>
+#include <chrono>
+
+int func(int n) {
+    std::cout << "thread start!" << " id: " << std::this_thread::get_id()  << std::endl;
+    std::cout << "......" << std::endl;
+    std::this_thread::sleep_for(std::chrono::seconds(5));
+    std::cout << "get: " << n << std::endl;
+    std::cout << "thread end!" << " id: " << std::this_thread::get_id()  << std::endl;
+    
+    return 5;
+}
+
+int main() {
+    std::cout << "main start! id: " << std::this_thread::get_id() << std::endl;
+//    std::packaged_task<int(int)> pt(func);
+    // 可以传入lambda表示式作为线程入口函数
+    std::packaged_task<int(int)> pt([](int n) {
+        std::cout << "thread start!" << " id: " << std::this_thread::get_id()  << std::endl;
+        std::cout << "......" << std::endl;
+        std::this_thread::sleep_for(std::chrono::seconds(5));
+        std::cout << "get: " << n << std::endl;
+        std::cout << "thread end!" << " id: " << std::this_thread::get_id()  << std::endl;
+
+        return 5;
+    });
+
+    pt(2);
+    std::future<int> future = pt.get_future();
+    // 调用get()函数后，程序会阻塞在这儿，直到线程结束得到结果
+    std::cout << future.get() << std::endl;
+
+    return 0;
+}
+
+/*
+    main start! id: 1
+    thread start! id: 1
+    ......
+    get: 2
+    thread end! id: 1
+    5
+*/
+```
+
+### 10.6.3 promise
+
+`std::promise`也是一个类模板，可以在一个线程中赋值，然后在另一个线程中使用。
+
+通过promise保存一个值，将来某个时刻通过`std::future`来获取。
+
+```c++
+#include <iostream>
+#include <future>
+#include <chrono>
+
+void func(std::promise<int>& promise ,int n) {
+    std::cout << "thread start!" << " id: " << std::this_thread::get_id()  << std::endl;
+    std::cout << "......" << std::endl;
+    std::this_thread::sleep_for(std::chrono::seconds(5));
+    std::cout << "get: " << n << std::endl;
+    std::cout << "thread end!" << " id: " << std::this_thread::get_id()  << std::endl;
+
+    promise.set_value(n);
+}
+
+void func2(std::promise<int>& promise) {
+    auto val = promise.get_future();
+    std::cout << "value from func():" << val.get() << std::endl;
+}
+
+int main() {
+    std::cout << "main start! id: " << std::this_thread::get_id() << std::endl;
+    std::promise<int> promise;
+    std::thread thread(func, std::ref(promise), 2);
+    thread.join();
+
+    std::thread thread1(func2, std::ref(promise));
+    thread1.join();
+
+    return 0;
+}
+
+/*
+    main start! id: 1
+    thread start! id: 2
+    ......
+    get: 2
+    thread end! id: 2
+    value from func():2
+*/
+```
+
+### 10.6. 4 future_status
+
+`std::future_status`枚举类型，表示线程的一些状态。
+
+```c++
+std::future<int> future = std::async(func);
+std::future_status status = future.wait_for(std::chrono::seconds(1));
+if (status == std::future_status::timeout) {
+    // ...
+} else if (status == std::future_status::ready) {
+    // ...
+} else if (status == std::future_status::deferred) {
+    // ...
+}
+```
+
+（1）std::future_status::timeout：等待超时
+
+（2）std::future_status::ready：表示线程成功返回
+
+（3）std::future_status::deferred：表示线程延迟执行，同样延迟后此线程的入口函数会在主线程中执行执行而不会开辟新的子线程。
+
+### 10.6.5 shared_future
+
+就`future`对象转移给另一个`future`对象，原本`future`对象只能`get()`一次，但是`shared_future`对象可以`get()`多次。
+
+```c++
+std::future<int> future = std::async(func);
+std::shared_future<int> share_future(std::move(future));
+//std::shared_future<int> share_future(future.share());
+// 通过future.valid()来判断对象是否有效
+```
+
+### 10.6.1 atomic
+
+ 
 
 # 11 STL
 
