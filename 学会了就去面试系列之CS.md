@@ -316,3 +316,126 @@ RTMP（Real Time Messaging Protocol） 是由 Adobe 公司基于 Flash Player �
 # 6 物理层
 
 本层上进行比特率的传输，详细地说就是模拟信号和数字信号的传输。
+
+# 7 [网络I/O模型](https://segmentfault.com/a/1190000003063859)
+
+**文件描述符**（File Descriptor，**fd**）：用于表示指向文件的引用的抽象化概念。
+
+文件描述符在形式上是一个非负整数。实际上，它是一个索引值，指向内核为每一个进程所维护的**该进程打开文件的记录表**。当程序打开一个现有文件或者创建一个新文件时，内核向进程返回一个文件描述符。在程序设计中，一些涉及底层的程序编写往往会围绕着文件描述符展开。但是文件描述符这一概念往往只适用于UNIX、Linux这样的操作系统。
+
+**缓存I/O**：又称标准I/O，在 Linux 的缓存 I/O 机制中，操作系统会将 I/O 的数据缓存在文件系统的页缓存（ page cache ）中，也就是说，数据会**先被拷贝到操作系统内核的缓冲区中，然后才会从操作系统内核的缓冲区拷贝到应用程序的地址空间。**
+
+**I/O模式**：对于一次I/O访问（以read举例），数据会先被拷贝到操作系统内核的缓冲区中，然后才会从操作系统内核的缓冲区拷贝到应用程序的地址空间。
+
+所以说，当一个read操作发生时，它会经历两个阶段：
+
+- 等待数据准备 (Waiting for the data to be ready)
+- 将数据从内核拷贝到进程中 (Copying the data from the kernel to the process)
+
+## 7.1 阻塞I/O
+
+阻塞I/O（blocking I/O），在Linux中，默认情况下所有的socket都是blocking。
+
+当用户进程调用了recvfrom这个系统调用，kernel就开始了IO的第一个阶段：准备数据（对于网络IO来说，很多时候数据在一开始还没有到达。比如，还没有收到一个完整的UDP包。这个时候kernel就要等待足够的数据到来）。这个过程需要等待，也就是说数据被拷贝到操作系统内核的缓冲区中是需要一个过程的。而在用户进程这边，整个进程会被阻塞（当然，是进程自己选择的阻塞）。当kernel一直等到数据准备好了，它就会将数据从kernel中拷贝到用户内存，然后kernel返回结果，用户进程才解除block的状态，重新运行起来。
+
+所以，blocking I/O的特点就是在IO执行的两个阶段都被block了。
+
+## 7.2 非阻塞I/O
+
+非阻塞I/O（noblocking I/O），可以通过设置socket使其变为non-blocking。
+
+当用户进程发出recvfrom操作时，如果kernel中的数据还没有准备好，那么它并不会block用户进程，而是立刻返回一个error。从用户进程角度讲 ，它发起一个read操作后，并不需要等待，而是马上就得到了一个结果。用户进程判断结果是一个error时，它就知道数据还没有准备好，于是它可以再次发送read操作。一旦kernel中的数据准备好了，并且又再次收到了用户进程的system call，那么它马上就将数据拷贝到了用户内存，然后返回。
+
+所以，nonblocking IO的特点是用户进程需要**不断的主动询问**kernel数据好了没有。
+
+## 7.3 I/O多路复用
+
+[I/O多路复用](I/O多路复用)（I/O multiplexing），也称事件驱动（event driven IO），比如poll，select，epoll。select/epoll的好处就在于单个process就可以同时处理多个网络连接的IO。它的基本原理就是select，poll，epoll这个function会不断的轮询所负责的所有socket，当某个socket有数据到达了，就通知用户进程。
+
+（进程通过将一个或多个fd传递给select，阻塞在select操作上，select帮我们侦测多个fd是否准备就绪，当有fd准备就绪时，select返回数据可读状态，应用程序再调用recvfrom读取数据。）
+
+### 7.3.1 select
+
+```c++
+int select (int n, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeout);
+```
+
+select 函数监视的文件描述符分3类，分别是writefds、readfds、和exceptfds。调用后select函数会阻塞，直到有描述副就绪（有数据 可读、可写、或者有except），或者超时（timeout指定等待时间，如果立即返回设为null即可），函数返回。当select函数返回后，可以 通过遍历fdset，来找到就绪的描述符。
+
+select目前几乎在所有的平台上支持，其良好跨平台支持也是它的一个优点。select的一个缺点在于**单个进程能够监视的文件描述符的数量存在最大限制**，在Linux上一般为1024，可以通**过修改宏定义甚至重新编译内核**的方式提升这一限制，但是这样也会造成效率的降低。
+
+缺点：
+
+- 每次调用select都需要将进程加入到所有监视socket的等待队列，每次唤醒都需要从每个队列中移除。这里涉及了两次遍历，而且每次都要将整个fds列表传递给内核，有一定的开销。正是因为遍历操作开销大，出于效率的考量，才会规定select的最大监视数量，默认只能监视1024个socket。
+- 进程被唤醒后，程序并不知道哪些socket收到数据，还需要遍历一次。
+
+### 7.3.2 poll
+
+```c++
+int poll (struct pollfd *fds, unsigned int nfds, int timeout);
+```
+
+**不同与select使用三个位图来表示三个fdset的方式，poll使用一个 pollfd的指针实现。**
+
+```c++
+struct pollfd {
+    int fd; /* file descriptor */
+    short events; /* requested events to watch */
+    short revents; /* returned events witnessed */
+};
+```
+
+**pollfd结构包含了要监视的event和发生的event，不再使用select“参数-值”传递的方式**。同时，pollfd并没有最大数量限制（但是数量过大后性能也是会下降）。 和select函数一样，poll返回后，需要轮询pollfd来获取就绪的描述符。
+
+从上面看，select和poll都需要在返回后，**通过遍历文件描述符来获取已经就绪的socket**。事实上，同时连接的大量客户端在一时刻可能只有很少的处于就绪状态，因此随着监视的描述符数量的增长，其效率也会线性下降。
+
+### 7.3.3 epoll
+
+epoll是在2.6内核中提出的，是之前的select和poll的增强版本。相对于select和poll来说，epoll更加灵活，**没有描述符限制**。epoll使用一个文件描述符管理多个描述符，将用户关心的**文件描述符的事件存放到内核的一个事件表中**，这样在用户空间和内核空间的copy只需一次。
+
+epoll操作过程需要三个接口，分别如下：
+
+```c++
+int epoll_create(int size)；// 创建一个epoll的句柄，size用来告诉内核这个监听的数目一共有多大
+int epoll_ctl(int epfd, int op, int fd, struct epoll_event *event)；// 向epoll对象添加连接的套接字
+int epoll_wait(int epfd, struct epoll_event * events, int maxevents, int timeout); // 收集发生事件的连接
+```
+
+（1）**int epoll_create(int size);**
+
+创建一个epoll的句柄，size用来告诉内核这个监听的数目一共有多大，这个参数不同于select()中的第一个参数，给出最大监听的fd+1的值，**参数size并不是限制了epoll所能监听的描述符最大个数，只是对内核初始分配内部数据结构的一个建议**。
+
+当创建好epoll句柄后，它就会占用一个fd值，在linux下如果查看/proc/进程id/fd/，是能够看到这个fd的，所以在使用完epoll后，必须调用close()关闭，否则可能导致fd被耗尽。
+
+（2）**int epoll_ctl(int epfd, int op, int fd, struct epoll_event \*event)；**
+
+- 函数是对指定描述符fd执行op操作。
+  \- **epfd**：是epoll_create()的返回值。
+  \- **op**：表示op操作，用三个宏来表示：添加EPOLL_CTL_ADD，删除EPOLL_CTL_DEL，修改EPOLL_CTL_MOD。分别添加、删除和修改对fd的监听事件。
+  \- **fd**：是需要监听的fd（文件描述符）
+  \- **epoll_event**：是告诉内核需要监听什么事。
+
+struct epoll_event结构如下：
+
+```c++
+struct epoll_event {
+  __uint32_t events;  /* Epoll events */
+  epoll_data_t data;  /* User data variable */
+};
+
+//events可以是以下几个宏的集合：
+EPOLLIN ：表示对应的文件描述符可以读（包括对端SOCKET正常关闭）；
+EPOLLOUT：表示对应的文件描述符可以写；
+EPOLLPRI：表示对应的文件描述符有紧急的数据可读（这里应该表示有带外数据到来）；
+EPOLLERR：表示对应的文件描述符发生错误；
+EPOLLHUP：表示对应的文件描述符被挂断；
+EPOLLET： 将EPOLL设为边缘触发(Edge Triggered)模式，这是相对于水平触发(Level Triggered)来说的。
+EPOLLONESHOT：只监听一次事件，当监听完这次事件之后，如果还需要继续监听这个socket的话，需要再次把这个socket加入到EPOLL队列里
+
+```
+
+（3） **int epoll_wait(int epfd, struct epoll_event \* events, int maxevents, int timeout);**
+
+等待epfd上的io事件，最多返回maxevents个事件。
+
+参数events用来从内核得到事件的集合，maxevents告之内核这个events有多大，这个maxevents的值不能大于创建epoll_create()时的size，参数timeout是超时时间（毫秒，0会立即返回，-1将不确定，也有说法说是永久阻塞）。该函数返回需要处理的事件数目，如返回0表示已超时。
