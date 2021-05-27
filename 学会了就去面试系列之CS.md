@@ -439,3 +439,20 @@ EPOLLONESHOT：只监听一次事件，当监听完这次事件之后，如果�
 等待epfd上的io事件，最多返回maxevents个事件。
 
 参数events用来从内核得到事件的集合，maxevents告之内核这个events有多大，这个maxevents的值不能大于创建epoll_create()时的size，参数timeout是超时时间（毫秒，0会立即返回，-1将不确定，也有说法说是永久阻塞）。该函数返回需要处理的事件数目，如返回0表示已超时。
+
+# 8 面经总结
+
+## 8.1 [HTTP和HTTPS](https://zhuanlan.zhihu.com/p/72616216)的区别
+
+（1）HTTPS是HTTP协议的安全版本，HTTP协议的数据传输是明文的，是不安全的，HTTPS使用了SSL/TLS协议进行了加密处理。
+
+（2）http和https使用连接方式不同，默认端口也不一样，http是80，https是443。
+
+## 8.2 [get和post](https://zhuanlan.zhihu.com/p/57361216)的区别
+
+本质上没有区别，都是TCP连接，
+
+（1）get多用于查询，会将请求参数放在URL中，用？或者&隔开，用户可以直接看到内容；而post一般用于提交数据，信息一般放在request body里面，用户无法看见内容；
+
+（2）get提交的数据长度是有限制的，因为URL的长度有限制（浏览器限制。IE是2048字节，chrome是8182字节），而post没有长度限制
+

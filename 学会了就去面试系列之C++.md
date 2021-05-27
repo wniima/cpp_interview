@@ -43,7 +43,7 @@
 那么，什么时候会执行函数的动态绑定？这需要符合以下三个条件（**通过父类的指针或引用访问字类的虚函数**）：
 
 - 通过指针或者引用来调用函数
-- 指针 upcast 向上转型
+- 指针 upcast 向下转型
 - 调用的是虚函数
 
 简单点来说就是通过父类的指针或引用来访问子类的虚函数。
@@ -440,6 +440,10 @@ int* p = const_cast<int*>(&n);
 ## 5.2 指针
 
 用来存放地址的一种类型，指向内存中某块存储单元，指针本身就是对象。
+
+**野指针**：没有被初始化的指针
+
+**悬空指针**：指针最初指向的内存已经被释放。避免悬空指针的方法是`delete`后将指针设置为`nullptr`
 
 ## 5.3 区别
 
@@ -971,7 +975,7 @@ free(p_malloc);
 
 （2）malloc申请成功时返回值类型是void*，一般需要类型转换，失败返回NULL，而new成功时返回对象的指针，失败时抛出bad_alloc异常；
 
-（3）malloc申请的位置在堆空间，而new分配的内存空间在自由存储区。
+（3）malloc申请的位置在堆空间，而new分配的内存空间在自由存储区（[自由存储区](https://zhuanlan.zhihu.com/p/371415674)是C++基于new操作符的一个抽象概念，凡是通过new操作符进行内存申请，该内存即为自由存储区）。
 
 ## 8.10 enum
 
@@ -1626,7 +1630,81 @@ int main() {
 
 ## emplace和push
 
-[待补充。。。](https://blog.csdn.net/xiaolewennofollow/article/details/52559364?utm_medium=distribute.pc_relevant_t0.none-task-blog-2%7Edefault%7EBlogCommendFromMachineLearnPai2%7Edefault-1.vipsorttest&depth_1-utm_source=distribute.pc_relevant_t0.none-task-blog-2%7Edefault%7EBlogCommendFromMachineLearnPai2%7Edefault-1.vipsorttest)
+【[参考](https://blog.csdn.net/xiaolewennofollow/article/details/52559364?utm_medium=distribute.pc_relevant_t0.none-task-blog-2%7Edefault%7EBlogCommendFromMachineLearnPai2%7Edefault-1.vipsorttest&depth_1-utm_source=distribute.pc_relevant_t0.none-task-blog-2%7Edefault%7EBlogCommendFromMachineLearnPai2%7Edefault-1.vipsorttest)】
+
+在c++11之前，通过push_back()向容器中加入一个右值元素的时候，首先会调用**构造函数**构造这个临时对象，然后调用**拷贝构造函数**将临时对象放到容器中，之后**释放临时变量**。这样造成的问题是临时变量申请资源的浪费。
+
+c++11之后，push_back()右值的时候就会调用**构造函数和移动构造函数**。
+
+而emplace_back()添加一个右值元素时，这个元素**原地构造，不需要触发拷贝构造和转移构造**。而且调用形式更加简洁，直接根据参数初始化临时对象的成员。
+
+```c++
+include <vector>
+#include <string>
+#include <iostream>
+
+struct President
+{
+    std::string name;
+    std::string country;
+    int year;
+
+    President(std::string p_name, std::string p_country, int p_year)
+            : name(std::move(p_name)), country(std::move(p_country)), year(p_year)
+    {
+        std::cout << "I am being constructed.\n";
+    }
+    President(const President& other)
+            : name(std::move(other.name)), country(std::move(other.country)), year(other.year)
+    {
+        std::cout << "I am being copy constructed.\n";
+    }
+    President(President&& other)
+            : name(std::move(other.name)), country(std::move(other.country)), year(other.year)
+    {
+        std::cout << "I am being moved.\n";
+    }
+    President& operator=(const President& other);
+};
+
+int main()
+{
+    std::vector<President> elections;
+    std::cout << "emplace_back:\n";
+    elections.emplace_back("Nelson Mandela", "South Africa", 1994); //没有类的创建
+
+    std::vector<President> reElections;
+    std::cout << "\npush_back:\n";
+    reElections.push_back(President("Franklin Delano Roosevelt", "the USA", 1936));
+
+    std::cout << "\nContents:\n";
+    for (President const& president: elections) {
+        std::cout << president.name << " was elected president of "
+                  << president.country << " in " << president.year << ".\n";
+    }
+    for (President const& president: reElections) {
+        std::cout << president.name << " was re-elected president of "
+                  << president.country << " in " << president.year << ".\n";
+    }
+
+}
+
+// result
+/*
+    emplace_back:
+    I am being constructed.
+
+    push_back:
+    I am being constructed.
+    I am being moved.
+
+    Contents:
+    Nelson Mandela was elected president of South Africa in 1994.
+    Franklin Delano Roosevelt was re-elected president of the USA in 1936.
+*/
+```
+
+
 
 ## 哈希函数
 
@@ -1752,6 +1830,11 @@ const是定义了一个常量，存放在内存的**静态区域**，在**编译
 
 （3）sizeof()是运算符，而strlen()是库函数。
 
+## 13.4 malloc和alloca的区别?
+
+malloc申请的内存空间在**堆**上，需要手动释放；alloca申请的内存空间在**栈**上，无需手动释放。
+
+
 ## 13.4 memset和memcpy的区别？
 
 memset主要应用是初始化某个内存空间。用来对一段内存空间全部设置为某个字符，一般用在对定义的字符串进行初始化为‘ ’或‘\0’；
@@ -1759,4 +1842,174 @@ memset主要应用是初始化某个内存空间。用来对一段内存空间�
 memcpy是用于copy源空间的数据到目的空间中;
 
 ## 13.4 C++和c/Java的区别？
+
+## 13.5 智能指针的原理？自己实现
+
+[shared_ptr](https://zhuanlan.zhihu.com/p/72354412)：通过计数来判断当前对象是否需要被释放：
+
+```c++
+template <class T>
+class SharedPtr {
+public:
+    explicit SharedPtr(T *t) : ptr_(t) {
+        // 防止分配空间失败
+        try {
+            use_count_ = new int(1);
+        } catch(...) {
+            delete ptr_;
+            ptr_ = nullptr;
+            use_count_ = nullptr;
+            exit(1);
+        }
+        std::cout << "Constructor is called!" << std::endl;
+    }
+
+    // 引用构造
+    SharedPtr(const SharedPtr<T> &ptr) : ptr_(ptr.ptr_), use_count_(ptr.use_count_) {
+        ++(*use_count_);
+        std::cout << "copy constructor is called!" << std::endl;
+    }
+
+    // 赋值构造
+    // 左边对象有可能已经指向了某一对象，因此要先将左边对象的引用计数减1，然后判断是否需要释放左边对象
+    // 如果减去1后左边对象的引用计数小于等于0，则可以释放这块内存，指向新的内存
+    // 否则就不释放，直接指向新的内存
+    SharedPtr<T> &operator=(const SharedPtr<T> &ptr) {
+        ++(*ptr.use_count_);
+
+        if (--(*use_count_) == 0) {
+            delete ptr_;
+            delete use_count_;
+            std::cout << "left object is deleted!" << std::endl;
+        }
+        ptr_ = ptr.ptr_;
+        use_count_ = ptr.use_count_;
+
+        std::cout << "assign operator is called!" << std::endl;
+        return *this;
+    }
+
+    int use_count() {
+        return *use_count_;
+    }
+
+    ~SharedPtr() {
+        if (--(*use_count_) == 0) {
+            delete ptr_;
+            ptr_ = nullptr;
+            delete use_count_;
+            use_count_ = nullptr;
+            std::cout << "Destructor is called!" << std::endl;
+        }
+    }
+
+private:
+    T *ptr_;
+    int *use_count_;
+};
+
+int main() {
+    int a = 10;
+    SharedPtr<int> ptr(&a);
+    std::cout << ptr.use_count() << std::endl;
+    SharedPtr<int> ptr1(ptr);
+    std::cout << "ptr: " << ptr.use_count() << std::endl;
+    std::cout << "ptr1: " << ptr1.use_count() << std::endl;
+    SharedPtr<int> ptr2(new int(19));
+    ptr2 = ptr;
+
+    std::cout << "ptr: " << ptr.use_count() << std::endl;
+    std::cout << "ptr1: " << ptr1.use_count() << std::endl;
+    std::cout << "ptr2: " << ptr2.use_count() << std::endl;
+
+    return 0;
+}
+
+// result
+/*
+    Constructor is called!
+    1
+    copy constructor is called!
+    ptr: 2
+    ptr1: 2
+    Constructor is called!
+    left object is deleted!
+    assign operator is called!
+    ptr: 3
+    ptr1: 3
+    ptr2: 3
+    Destructor is called!
+*/
+```
+
+unique_ptr将拷贝构造函数和拷贝赋值函数干掉实现独占，并提供以下常用函数：
+
+- reset()：释放资源，指向新的资源
+- release()：返回资源，舍弃对资源的管理
+- get()：返回资源，提供外部使用
+
+```c++
+template <class T>
+class UniquePtr {
+public:
+    explicit UniquePtr(T *t = nullptr) : ptr_(t) {
+        std::cout << "constructor is called!" << std::endl;
+    }
+
+    ~UniquePtr() {
+        delete ptr_;
+        ptr_ = nullptr;
+        std::cout << "destructor is called!" << std::endl;
+    }
+
+    void reset(T *t) {
+        if (ptr_ != nullptr) {
+            delete ptr_;
+        }
+        ptr_ = t;
+        std::cout << "reset is called!" << std::endl;
+    }
+
+    T * release() {
+        T *temp = ptr_;
+        delete ptr_;
+        ptr_ = nullptr;
+        std::cout << "release is called!" << std::endl;
+        return temp;
+    }
+
+    T get() {
+        std::cout << "get is called!" << std::endl;
+        return *ptr_;
+    }
+
+    // 删掉拷贝构造函数
+    UniquePtr(UniquePtr<T> &) = delete;
+    // 删掉拷贝赋值函数
+    UniquePtr<T> &operator=(UniquePtr<T> &) = delete;
+private:
+    T *ptr_;
+};
+
+int main() {
+    UniquePtr<int> ptr(new int(8));
+    std::cout << "ptr: " << ptr.get() << std::endl;
+    int a = 10;
+    ptr.reset(&a);
+    std::cout << "ptr: " << ptr.get() << std::endl;
+    ptr.release();
+}
+
+// result
+/*
+    constructor is called!
+    ptr: get is called!
+    8
+    reset is called!
+    ptr: get is called!
+    10
+    release is called!
+    destructor is called!
+*/
+```
 
