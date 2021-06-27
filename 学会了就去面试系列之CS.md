@@ -103,7 +103,7 @@ TCP/IP模型只有四层模型，它是将OSI七层模型的上面三层合并�
 
 ## 2.5 HTTP长短连接的使用场景是什么？
 
-长连接：多用于操作频繁，点对点的通讯，而且客户端数目较少的情况。例如即时通讯、网络游戏等。
+长连接：多用于读写操作频繁，点对点的通讯，而且客户端数目较少的情况。例如即时通讯、网络游戏等。
 
 短连接：用户数目比较多的Web网站一般采用短连接，防止服务器资源被被无效占用。
 
@@ -546,7 +546,7 @@ int select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struc
 		long tv_sec; /* seconds */
 		long tv_usec; /* microseconds */
 	};
-	void FD_CLR(int fd, fd_set *set); 	//把文件描述符集合里fd清0
+	void FD_CLR(int fd, fd_set *set); 	//把文件描述符集合里fd清除
 	int FD_ISSET(int fd, fd_set *set); 	//测试文件描述符集合里fd是否置1
 	void FD_SET(int fd, fd_set *set); 	//把文件描述符集合里fd位置1
 	void FD_ZERO(fd_set *set); 			//把文件描述符集合里所有位清0
@@ -608,6 +608,10 @@ int poll(struct pollfd *fds, nfds_t nfds, int timeout);
 ### 7.3.3 epoll
 
 epoll是在2.6内核中提出的，是之前的select和poll的增强版本。相对于select和poll来说，epoll更加灵活，**没有描述符限制**。epoll使用一个文件描述符管理多个描述符，将用户关心的**文件描述符的事件存放到内核的一个事件表中**，这样在用户空间和内核空间的copy只需一次。
+
+我们在调用epoll_create时，内核除了帮我们在epoll文件系统里建了个file结点，在内核cache里建了个红黑树用于存储以后epoll_ctl传来的socket外，还会再建立一个[rdllist](https://zhuanlan.zhihu.com/p/165287735)双向链表，用于存储准备就绪的事件，当epoll_wait调用时，仅仅观察这个rdllist双向链表里有没有数据即可。有数据就返回，没有数据就sleep，等到timeout时间到后即使链表没数据也返回。所以，epoll_wait非常高效。
+
+  所有添加到epoll中的事件都会与设备(如网卡)驱动程序建立回调关系，也就是说相应事件的发生时会调用这里的回调方法。这个回调方法在内核中叫做ep_poll_callback，它会把这样的事件放到上面的rdllist双向链表中。
 
 epoll操作过程需要三个接口，分别如下：
 
@@ -711,3 +715,9 @@ Unix系统中，一切皆文件。
 ## 8.8 socket本地通信需要通过tcp/ip协议栈吗
 
 本地socket通信用的是unix domain，跟网络socket不一样，unix domain应该是Socket fd绑定到一个本地cfile文件，然后通过对cfile文件的读写实现进程间通信
+
+## 8.9 select和epoll的区别
+
+相同点：无论是select还是epoll都是让内核去监听是否有相应事件发生的，然后用户再去执行操作；
+
+不同点：select将文件描述符分成不同种类（可读，可写，异常），以“集合”的形式（fd_set）传给内核让其监听，当有事件发生时，内核会发出通知（select返回值），但是并不知道具体是谁，所以还需要进行一次判断；而epoll的监听是通过创建一颗红黑树（epoll_creat()），然后将所有的套接字放到树上（epoll_ctl()），设置好相应的监听事件后，每当事件发生时，内部通过与硬件的回调方法直接返回具体发生事件的套接字给用户，然后再进行相应操作，或者用户可以直接设置回调函数，在事件发生时直接执行。
