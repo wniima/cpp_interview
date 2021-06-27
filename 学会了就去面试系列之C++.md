@@ -1687,7 +1687,7 @@ vector 的 push 和 pop 操作都只是**对尾部**进行操作， 这里说的
 
 如果原空间大小为 0 则分配 1 个元素，如果大于 0 则分配原空间两倍的新空间，然后把数据拷贝过去。
 
-<img src="D:\Desktop\PlanBrick\CPP\interview\pics\krjz.jpg" style="zoom: 80%;" />
+<img src=".\pics\krjz.jpg" style="zoom: 80%;" />
 
 ### 11.1.4 erase删除元素
 
@@ -1879,7 +1879,7 @@ class list {
 
 动态双端数组，允许在头尾进行常数时间的插入和删除。
 
-<img src="D:\Desktop\PlanBrick\CPP\interview\pics\deque.jpg" style="zoom: 67%;" />
+<img src=".\pics\deque.jpg" style="zoom: 67%;" />
 
  deque 没有所谓的**容量**概念，因为它是**动态地以分段连续空间组合而成**随时可以增加一块新的空间并拼接起来。
 
